@@ -34,6 +34,11 @@ class TF_Data(object):
 
 
     def _column_to_csv_defaults(self):
+        """
+        定义csv文件中各个特征默认的数据类型
+        :return:
+            OrderedDict {'feature name': [''],...}
+        """
         csv_defaults = OrderedDict()
         csv_defaults['label'] = [0]
         for f in self._all_features.values():
@@ -51,10 +56,16 @@ class TF_Data(object):
         return csv_defaults
 
     def _parse_csv(self, field_delim=' ', na_value='-'):
+        """
+        csv数据的解析函数
+        :param field_delim: csv字段分隔符
+        :param na_value: 使用csv默认值填充na_value
+        :return:
+            feature dict: {feature: Tensor ... }
+        """
         csv_defaults = self._csv_defaults
         def decode_csv(value):
             parsed_line = tf.decode_csv(value, record_defaults = list(csv_defaults.values()), field_delim=field_delim, na_value = na_value)
-            #   feature_names = [i for i in list(test.columns)]
             features = dict(zip(self._csv_defaults.keys(), parsed_line))
             for f in self._all_features.values():
                 if f not in self._feature_used:
@@ -70,6 +81,11 @@ class TF_Data(object):
         return decode_csv
 
     def input_fn(self):
+        """
+        生成dataset（tensor）
+        :return:
+            generator
+        """
         dataset = tf.data.TextLineDataset(self._data_file)
         dataset = dataset.map(self._parse_csv())  # Decode each line
 
@@ -77,14 +93,19 @@ class TF_Data(object):
         # dataset = dataset.shuffle(10).repeat(1)
         padding_dic = {k: () for k in self._feature_used}
         padding_dic['tag'] = [None]
-        #padding_dic['main_actor'] = [None]
+        # padding_dic['main_actor'] = [None]
         padded_shapes = (padding_dic, ())
-        dataset = dataset.padded_batch(10000, padded_shapes=padded_shapes)
+        dataset = dataset.padded_batch(int(self.model_conf['batch_size']), padded_shapes=padded_shapes)
 
         # Return the read end of the pipeline.
         return dataset.make_one_shot_iterator().get_next()
 
     def feat_column(self):
+        """
+        特征列处理
+        :return:
+            wide_columns
+        """
         wide_columns = []
         wide_dim = 0
         for feature, conf in self._feature_conf_dic.items():
@@ -135,6 +156,12 @@ class TF_Data(object):
         return wide_columns
 
     def gbdt_input(self):
+        """
+        将特征列处理后的数据转化为array输出
+        :return:
+            process_data：训练或预估数据集； type：array
+            label：数据集对应的标签； type：array
+        """
         tensor = tf.feature_column.input_layer(self.input_fn()[0], self.feat_column())
         label_element = self.input_fn()[1]
         with tf.Session() as sess:
@@ -150,6 +177,9 @@ class TF_Data(object):
 
 
 class FileListGenerator(object):
+    """
+    按天读取数据（每天的数据分为多个part）
+    """
     def __init__(self, data_path):
         self._data_path = data_path
 
