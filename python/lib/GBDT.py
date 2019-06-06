@@ -38,8 +38,8 @@ class GBDT_spr(object):
         :param
             mode: ‘train’ or  ‘pred’
         :return:
-            lr_feat：gbdt生成的离散特征
-            y：对应数据的label
+            transformed_training_matrix：gbdt生成的离散特征
+            batch_y：对应数据的label
         '''
 
         params = {
@@ -48,18 +48,16 @@ class GBDT_spr(object):
             'objective': 'binary',
             'metric': {'binary_logloss'},
             'num_leaves': int(self.gbdt_conf['num_leaves']),
-   #         'num_trees': 60,
+            # 'num_trees': 60,
             'min_data_in_leaf': int(self.gbdt_conf['min_data_in_leaf']),
             'learning_rate': float(self.gbdt_conf['learning_rate']),
             'feature_fraction': float(self.gbdt_conf['feature_fraction']),
             'bagging_fraction': float(self.gbdt_conf['bagging_fraction']),
-   #         'bagging_freq': 5,
+            # 'bagging_freq': 5,
             'verbose': -1
         }
 
         if mode == 'train':
-#            X = self.dataset[0]
-#            y = self.dataset[1].tolist()
             if self.model_conf['batch_size'] == '0':
                 print('TODO')
             else:
@@ -83,7 +81,6 @@ class GBDT_spr(object):
                         del (batch_X)
                         gc.collect()
                     except StopIteration:
-               #         print('Generator return value:', e.value)
                         break
 
                 joblib.dump(gbm, os.path.join(MODEL_DIR, "gbdt_model.m"))
@@ -95,20 +92,18 @@ class GBDT_spr(object):
                         batch_y = dataset[1]
                         gbm_trans = joblib.load(os.path.join(MODEL_DIR, "gbdt_model.m"))
                         y_pred = gbm_trans.predict(batch_X, pred_leaf=True)
-                        transformed_training_matrix = np.zeros([len(y_pred), len(y_pred[1]) * 3],
+                        transformed_training_matrix = np.zeros([len(y_pred), len(y_pred[1]) * int(self.gbdt_conf['num_leaves'])],
                                                                dtype=np.int64)  # N * num_tress * num_leafs
                         for m in range(0, len(y_pred)):
                             # temp表示在每棵树上预测的值所在节点的序号（0,64,128,...,6436 为100棵树的序号，中间的值为对应树的节点序号）
-                            temp = np.arange(len(y_pred[0])) * 3 + np.array(y_pred[m])
+                            temp = np.arange(len(y_pred[0])) * int(self.gbdt_conf['num_leaves']) + np.array(y_pred[m])
                             # 构造one-hot 训练数据集
                             transformed_training_matrix[m][temp] += 1
                         del (dataset)
                         del (batch_X)
                         gc.collect()
                         yield transformed_training_matrix, batch_y
-
-                    except StopIteration as e:
-                        print('Generator return value:', e.value)
+                    except StopIteration:
                         break
 
         else:
@@ -120,16 +115,15 @@ class GBDT_spr(object):
 
                     batch_y = dataset[1]
                     y_pred = gbm_trans.predict(batch_X, pred_leaf=True)
-                    transformed_training_matrix = np.zeros([len(y_pred), len(y_pred[1]) * 3],
+                    transformed_training_matrix = np.zeros([len(y_pred), len(y_pred[1]) * int(self.gbdt_conf['num_leaves'])],
                                                            dtype=np.int64)  # N * num_tress * num_leafs
                     for m in range(0, len(y_pred)):
                         # temp表示在每棵树上预测的值所在节点的序号（0,64,128,...,6436 为100棵树的序号，中间的值为对应树的节点序号）
-                        temp = np.arange(len(y_pred[0])) * 3 + np.array(y_pred[m])
+                        temp = np.arange(len(y_pred[0])) * int(self.gbdt_conf['num_leaves']) + np.array(y_pred[m])
                         # 构造one-hot 训练数据集
                         transformed_training_matrix[m][temp] += 1
                     yield transformed_training_matrix, batch_y
-                except StopIteration as e:
-                    print('Generator return value:', e.value)
+                except StopIteration:
                     break
 
 
